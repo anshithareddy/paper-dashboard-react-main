@@ -1,12 +1,8 @@
-
-
 import React from "react";
-import buildingData from 'D:/abhijith/MERN/dholakpur_developers/paper-dashboard-react-main/src/db.json';
-import { useState,useEffect } from "react";
+import { useEffect, useState } from "react";
 // react plugin used to create charts
-import { Line, Pie,Bar } from "react-chartjs-2";
+import { Line, Pie } from "react-chartjs-2";
 // reactstrap components
-import { evaluate } from "Metrics";
 import axios from "axios";
 import {
   Card,
@@ -15,103 +11,211 @@ import {
   CardFooter,
   CardTitle,
   Row,
-  Col,
-  Table
+  Col
 } from "reactstrap";
-// core components
-import {
-  dashboard24HoursPerformanceChart,
-  dashboardEmailStatisticsChart,
-  dashboardNASDAQChart,
-} from "variables/charts.js";
-import { Progress } from 'reactstrap';
-import { CircularProgressbar, buildStyles } from 'react-circular-progressbar';
 
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://127.0.0.1:5000";
+const REFRESH_INTERVAL_MS = 3000;
+const TOTAL_GRID_CELLS = 256;
 
 function Dashboard() {
-  function TableRow({ rowData }) {
-    return (
-      <tr>
-        {rowData.map((data, index) => (
-          <td key={index}>{data}</td>
-        ))}
-      </tr>
-    );
-  }
-  
   const [buildings, setBuildings] = useState([]);
-  
-  
-  const [parks, setParks] = useState(0);
-  const [residences, setResidences] = useState(0);
-  const [industries, setIndustries] = useState(0);
-  const [powerGrids, setPowerGrids] = useState(0);
-  const [wasteManagement, setWasteManagement] = useState(0);
-  const [commercials, setCommercials] = useState(0);
-  const [roads, setRoads] = useState(0);
-  const [TotalPopulation, setTotalPopulation] = useState(0);
-  const [hospitals, setHospitals] = useState(0);
-  const [schools, setSchools] = useState(0);
 
-  // Function to evaluate building types and calculate counts
   useEffect(() => {
-    buildings.forEach(building => {
-      switch (building.buildingType) {
-        case 'residential':
-          setResidences(prevCount => prevCount + 1); // Increment residences count
-          break;
-        case 'commercial':
-          setCommercials(prevCount => prevCount + 1); // Increment commercials count
-          break;
-        case 'industrial':
-          setIndustries(prevCount => prevCount + 1); // Increment industries count
-          break;
-        case 'power-plant':
-          setPowerGrids(prevCount => prevCount + 1); // Increment powerGrids count
-          break;
-        case 'road':
-          setRoads(prevCount => prevCount + 1); // Increment roads count
-          break;
-        
+    let isMounted = true;
+
+    const loadBuildings = async () => {
+      try {
+        const response = await axios.get(`${API_BASE_URL}/arrq`);
+
+        if (isMounted && Array.isArray(response.data)) {
+          setBuildings(response.data);
+        }
+      } catch (error) {
+        console.error("Failed to refresh dashboard values:", error);
       }
-    });
-    setTotalPopulation(residences * 50);
-    setHospitals(commercials / 2);
-    setSchools(commercials - hospitals);
-    
-    // Calculate waste management
-    setWasteManagement(residences * 50 + industries * 150);
-  }, [buildings]);
+    };
 
-  // Function to evaluate building types
-  
+    loadBuildings();
+    const intervalId = window.setInterval(loadBuildings, REFRESH_INTERVAL_MS);
 
-    // Calculate waste management
-
-
-  useEffect(() => {
-    // Set buildings state when component mounts
-    setBuildings(buildingData);
-    setResidences(0); 
-    setCommercials(0);
-    setIndustries(0);
-    setPowerGrids(0);
-    setRoads(0);
-    setParks(0);
-    setTotalPopulation(0);
-    setHospitals(0);
-    setSchools(0);
-    setWasteManagement(0);
+    return () => {
+      isMounted = false;
+      window.clearInterval(intervalId);
+    };
   }, []);
-  
 
-  // Run evaluation when buildings state changes
-  useEffect(() => {
-    setParks(256-residences-commercials-industries-powerGrids-roads);
-  }, [residences,commercials,industries,powerGrids,roads,buildings]);
+  const metrics = buildings.reduce(
+    (totals, building) => {
+      switch (building.buildingType) {
+        case "residential":
+          totals.residences += 1;
+          break;
+        case "commercial":
+          totals.commercials += 1;
+          break;
+        case "industrial":
+          totals.industries += 1;
+          break;
+        case "power-plant":
+          totals.powerGrids += 1;
+          break;
+        case "base-station":
+          totals.baseStations += 1;
+          break;
+        case "road":
+          totals.roads += 1;
+          break;
+        default:
+          break;
+      }
 
-  console.log(buildings);
-  console.log(residences)
+      return totals;
+    },
+    {
+      residences: 0,
+      commercials: 0,
+      industries: 0,
+      powerGrids: 0,
+      roads: 0,
+      baseStations: 0,
+    }
+  );
+
+  const residences = metrics.residences;
+  const commercials = metrics.commercials;
+  const industries = metrics.industries;
+  const powerGrids = metrics.powerGrids;
+  const roads = metrics.roads;
+  const baseStations = metrics.baseStations;
+  const parks = Math.max(
+    0,
+    TOTAL_GRID_CELLS - residences - commercials - industries - powerGrids - roads - baseStations
+  );
+
+  const chartLabels = [
+    "Houses",
+    "Commercial",
+    "Industries",
+    "Roads",
+    "Power",
+    "Base",
+    "Greenery",
+  ];
+
+  const liveCounts = [
+    residences,
+    commercials,
+    industries,
+    roads,
+    powerGrids,
+    baseStations,
+    parks,
+  ];
+
+  const liveShare = liveCounts.map((count) =>
+    Number(((count / TOTAL_GRID_CELLS) * 100).toFixed(1))
+  );
+
+  const dashboardLineChartData = {
+    labels: chartLabels,
+    datasets: [
+      {
+        label: "Grid Count",
+        borderColor: "#6bd098",
+        backgroundColor: "rgba(107, 208, 152, 0.2)",
+        pointBackgroundColor: "#6bd098",
+        pointBorderColor: "#6bd098",
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        borderWidth: 3,
+        tension: 0.35,
+        fill: true,
+        data: liveCounts,
+      },
+      {
+        label: "Grid Share %",
+        borderColor: "#f17e5d",
+        backgroundColor: "rgba(241, 126, 93, 0.15)",
+        pointBackgroundColor: "#f17e5d",
+        pointBorderColor: "#f17e5d",
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        borderWidth: 3,
+        tension: 0.35,
+        fill: true,
+        data: liveShare,
+      },
+    ],
+  };
+
+  const dashboardLineChartOptions = {
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        display: true,
+        position: "top",
+      },
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        ticks: {
+          precision: 0,
+          color: "#9f9f9f",
+        },
+        grid: {
+          drawBorder: false,
+          color: "rgba(0, 0, 0, 0.06)",
+        },
+      },
+      x: {
+        ticks: {
+          color: "#9f9f9f",
+        },
+        grid: {
+          display: false,
+          drawBorder: false,
+        },
+      },
+    },
+  };
+
+  const dashboardPieChartData = {
+    labels: chartLabels,
+    datasets: [
+      {
+        label: "Grid Mix",
+        backgroundColor: [
+          "#fbc658",
+          "#51cbce",
+          "#ef8157",
+          "#6c757d",
+          "#4b8ef1",
+          "#9b59b6",
+          "#2ecc71",
+        ],
+        borderColor: "#ffffff",
+        borderWidth: 2,
+        data: liveCounts,
+      },
+    ],
+  };
+
+  const dashboardPieChartOptions = {
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        display: true,
+        position: "bottom",
+      },
+      tooltip: {
+        callbacks: {
+          label: (context) => `${context.label}: ${context.raw}`,
+        },
+      },
+    },
+  };
 
   return (
     <>
@@ -287,13 +391,13 @@ function Dashboard() {
           <Col md="12">
             <Card>
               <CardHeader>
-                <CardTitle tag="h5">Users Behavior</CardTitle>
-                <p className="card-category">24 Hours performance</p>
+                <CardTitle tag="h5">Grid Trends</CardTitle>
+                <p className="card-category">Live counts and grid share by item type</p>
               </CardHeader>
-              <CardBody>
+              <CardBody style={{ height: "320px" }}>
                 <Line
-                  data={dashboard24HoursPerformanceChart.data}
-                  options={dashboard24HoursPerformanceChart.options}
+                  data={dashboardLineChartData}
+                  options={dashboardLineChartOptions}
                   width={400}
                   height={100}
                 />
@@ -301,35 +405,44 @@ function Dashboard() {
               <CardFooter>
                 <hr />
                 <div className="stats">
-                  <i className="fa fa-history" /> Updated 3 minutes ago
+                  <i className="fa fa-history" /> Refreshes automatically from the current grid
                 </div>
               </CardFooter>
             </Card>
           </Col>
         </Row>
         <Row>
-          <Col md="4">
+          <Col md="8" className="ml-auto mr-auto">
             <Card>
               <CardHeader>
-                <CardTitle tag="h5">Email Statistics</CardTitle>
-                <p className="card-category">Last Campaign Performance</p>
+                <CardTitle tag="h5">Grid Composition</CardTitle>
+                <p className="card-category">Live share of all occupied and free cells</p>
               </CardHeader>
-              <CardBody style={{ height: "266px" }}>
-                <Pie
-                  data={dashboardEmailStatisticsChart.data}
-                  options={dashboardEmailStatisticsChart.options}
-                />
+              <CardBody
+                style={{
+                  height: "420px",
+                  display: "flex",
+                  justifyContent: "center",
+                  alignItems: "center",
+                }}
+              >
+                <div style={{ width: "100%", maxWidth: "440px", height: "100%" }}>
+                  <Pie
+                    data={dashboardPieChartData}
+                    options={dashboardPieChartOptions}
+                  />
+                </div>
               </CardBody>
               <CardFooter>
                 <div className="legend">
-                  <i className="fa fa-circle text-primary" /> Opened{" "}
-                  <i className="fa fa-circle text-warning" /> Read{" "}
-                  <i className="fa fa-circle text-danger" /> Deleted{" "}
-                  <i className="fa fa-circle text-gray" /> Unopened
+                  <i className="fa fa-circle text-warning" /> Houses{" "}
+                  <i className="fa fa-circle text-info" /> Commercial{" "}
+                  <i className="fa fa-circle text-danger" /> Industries{" "}
+                  <i className="fa fa-circle text-success" /> Greenery
                 </div>
                 <hr />
                 <div className="stats">
-                  <i className="fa fa-calendar" /> Number of emails sent
+                  <i className="fa fa-refresh" /> Synced with saved grid items
                 </div>
               </CardFooter>
             </Card>

@@ -1,294 +1,227 @@
-
-import React from "react";
-
-// reactstrap components
+import React, { useEffect, useMemo, useState } from "react";
+import axios from "axios";
 import {
-  Button,
+  Badge,
   Card,
   CardHeader,
   CardBody,
   CardFooter,
   CardTitle,
-  FormGroup,
-  Form,
-  Input,
   Row,
   Col,
 } from "reactstrap";
+import { calculateAqiMetrics } from "../utils/aqi";
+
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://127.0.0.1:5000";
+const REFRESH_INTERVAL_MS = 3000;
 
 function User() {
+  const [buildings, setBuildings] = useState([]);
+  const [lastUpdated, setLastUpdated] = useState("");
+  const [loadError, setLoadError] = useState("");
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadBuildings = async () => {
+      try {
+        const response = await axios.get(`${API_BASE_URL}/arrq`);
+
+        if (isMounted && Array.isArray(response.data)) {
+          setBuildings(response.data);
+          setLastUpdated(new Date().toLocaleTimeString());
+          setLoadError("");
+        }
+      } catch (error) {
+        console.error("Failed to refresh user profile:", error);
+
+        if (isMounted) {
+          setLoadError("Profile insights are waiting for backend data.");
+        }
+      }
+    };
+
+    loadBuildings();
+    const intervalId = window.setInterval(loadBuildings, REFRESH_INTERVAL_MS);
+
+    return () => {
+      isMounted = false;
+      window.clearInterval(intervalId);
+    };
+  }, []);
+
+  const { airPollutionIndex, aqiBand, reward, greenery, occupiedCells, counts } =
+    calculateAqiMetrics(buildings);
+
+  const populationEstimate = counts.residential * 50;
+  const commerceSupport = counts.commercial * 35;
+  const industryPressure = counts.industrial + counts.powerPlant;
+
+  const quickStats = [
+    { label: "Population Capacity", value: populationEstimate },
+    { label: "Active Grid Cells", value: occupiedCells },
+    { label: "Green Cells", value: greenery },
+    { label: "Commercial Support", value: commerceSupport },
+  ];
+
+  const recommendations = useMemo(() => {
+    const items = [];
+
+    if (airPollutionIndex > 150) {
+      items.push("Reduce industrial and power-plant clustering near residential zones.");
+    }
+
+    if (greenery < 120) {
+      items.push("Increase greenery to create stronger air-recovery buffers across the grid.");
+    }
+
+    if (counts.road > 45) {
+      items.push("Review road spread and add green separators around heavy traffic corridors.");
+    }
+
+    if (counts.commercial < Math.ceil(counts.residential / 6)) {
+      items.push("Add more commercial support to balance residential growth.");
+    }
+
+    if (!items.length) {
+      items.push("City balance looks stable. Fine-tune district placement for even better AQI.");
+    }
+
+    return items;
+  }, [airPollutionIndex, greenery, counts]);
+
   return (
     <>
       <div className="content">
         <Row>
-          <Col md="4">
+          <Col lg="4" md="5">
             <Card className="card-user">
               <div className="image">
-                <img alt="..." src={require("assets/img/damir-bosnjak.jpg")} />
+                <img alt="planner cover" src={require("assets/img/header.jpg")} />
               </div>
               <CardBody>
                 <div className="author">
-                  <a href="#pablo" onClick={(e) => e.preventDefault()}>
-                    <img
-                      alt="..."
-                      className="avatar border-gray"
-                      src={require("assets/img/mike.jpg")}
-                    />
-                    <h5 className="title">Chet Faker</h5>
-                  </a>
-                  <p className="description">@chetfaker</p>
+                  <img
+                    alt="planner avatar"
+                    className="avatar border-gray"
+                    src={require("assets/img/default-avatar.png")}
+                  />
+                  <h5 className="title">City Operations Planner</h5>
+                  <p className="description">Live planning profile</p>
                 </div>
                 <p className="description text-center">
-                  "I like the way you work it <br />
-                  No diggity <br />I wanna bag it up"
+                  Managing growth, air quality, and infrastructure balance across the smart city grid.
                 </p>
               </CardBody>
               <CardFooter>
                 <hr />
                 <div className="button-container">
                   <Row>
-                    <Col className="ml-auto" lg="3" md="6" xs="6">
+                    <Col className="ml-auto" lg="4" md="4" xs="4">
                       <h5>
-                        12 <br />
-                        <small>Files</small>
+                        {counts.residential}
+                        <br />
+                        <small>Homes</small>
                       </h5>
                     </Col>
-                    <Col className="ml-auto mr-auto" lg="4" md="6" xs="6">
+                    <Col className="ml-auto mr-auto" lg="4" md="4" xs="4">
                       <h5>
-                        2GB <br />
-                        <small>Used</small>
+                        {counts.commercial}
+                        <br />
+                        <small>Commercial</small>
                       </h5>
                     </Col>
-                    <Col className="mr-auto" lg="3">
+                    <Col className="mr-auto" lg="4" md="4" xs="4">
                       <h5>
-                        24,6$ <br />
-                        <small>Spent</small>
+                        {industryPressure}
+                        <br />
+                        <small>Heavy Load</small>
                       </h5>
                     </Col>
                   </Row>
                 </div>
               </CardFooter>
             </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle tag="h4">Team Members</CardTitle>
-              </CardHeader>
-              <CardBody>
-                <ul className="list-unstyled team-members">
-                  <li>
-                    <Row>
-                      <Col md="2" xs="2">
-                        <div className="avatar">
-                          <img
-                            alt="..."
-                            className="img-circle img-no-padding img-responsive"
-                            src={require("assets/img/faces/ayo-ogunseinde-2.jpg")}
-                          />
-                        </div>
-                      </Col>
-                      <Col md="7" xs="7">
-                        DJ Khaled <br />
-                        <span className="text-muted">
-                          <small>Offline</small>
-                        </span>
-                      </Col>
-                      <Col className="text-right" md="3" xs="3">
-                        <Button
-                          className="btn-round btn-icon"
-                          color="success"
-                          outline
-                          size="sm"
-                        >
-                          <i className="fa fa-envelope" />
-                        </Button>
-                      </Col>
-                    </Row>
-                  </li>
-                  <li>
-                    <Row>
-                      <Col md="2" xs="2">
-                        <div className="avatar">
-                          <img
-                            alt="..."
-                            className="img-circle img-no-padding img-responsive"
-                            src={require("assets/img/faces/joe-gardner-2.jpg")}
-                          />
-                        </div>
-                      </Col>
-                      <Col md="7" xs="7">
-                        Creative Tim <br />
-                        <span className="text-success">
-                          <small>Available</small>
-                        </span>
-                      </Col>
-                      <Col className="text-right" md="3" xs="3">
-                        <Button
-                          className="btn-round btn-icon"
-                          color="success"
-                          outline
-                          size="sm"
-                        >
-                          <i className="fa fa-envelope" />
-                        </Button>
-                      </Col>
-                    </Row>
-                  </li>
-                  <li>
-                    <Row>
-                      <Col md="2" xs="2">
-                        <div className="avatar">
-                          <img
-                            alt="..."
-                            className="img-circle img-no-padding img-responsive"
-                            src={require("assets/img/faces/clem-onojeghuo-2.jpg")}
-                          />
-                        </div>
-                      </Col>
-                      <Col className="col-ms-7" xs="7">
-                        Flume <br />
-                        <span className="text-danger">
-                          <small>Busy</small>
-                        </span>
-                      </Col>
-                      <Col className="text-right" md="3" xs="3">
-                        <Button
-                          className="btn-round btn-icon"
-                          color="success"
-                          outline
-                          size="sm"
-                        >
-                          <i className="fa fa-envelope" />
-                        </Button>
-                      </Col>
-                    </Row>
-                  </li>
-                </ul>
-              </CardBody>
-            </Card>
           </Col>
-          <Col md="8">
+
+          <Col lg="8" md="7">
             <Card className="card-user">
               <CardHeader>
-                <CardTitle tag="h5">Edit Profile</CardTitle>
+                <CardTitle tag="h4">Planner Profile</CardTitle>
+                <p className="card-category">
+                  Live city health and planning insights
+                  {lastUpdated ? ` • refreshed at ${lastUpdated}` : ""}
+                </p>
               </CardHeader>
               <CardBody>
-                <Form>
-                  <Row>
-                    <Col className="pr-1" md="5">
-                      <FormGroup>
-                        <label>Company (disabled)</label>
-                        <Input
-                          defaultValue="Creative Code Inc."
-                          disabled
-                          placeholder="Company"
-                          type="text"
-                        />
-                      </FormGroup>
-                    </Col>
-                    <Col className="px-1" md="3">
-                      <FormGroup>
-                        <label>Username</label>
-                        <Input
-                          defaultValue="michael23"
-                          placeholder="Username"
-                          type="text"
-                        />
-                      </FormGroup>
-                    </Col>
-                    <Col className="pl-1" md="4">
-                      <FormGroup>
-                        <label htmlFor="exampleInputEmail1">
-                          Email address
-                        </label>
-                        <Input placeholder="Email" type="email" />
-                      </FormGroup>
-                    </Col>
-                  </Row>
-                  <Row>
-                    <Col className="pr-1" md="6">
-                      <FormGroup>
-                        <label>First Name</label>
-                        <Input
-                          defaultValue="Chet"
-                          placeholder="Company"
-                          type="text"
-                        />
-                      </FormGroup>
-                    </Col>
-                    <Col className="pl-1" md="6">
-                      <FormGroup>
-                        <label>Last Name</label>
-                        <Input
-                          defaultValue="Faker"
-                          placeholder="Last Name"
-                          type="text"
-                        />
-                      </FormGroup>
-                    </Col>
-                  </Row>
-                  <Row>
-                    <Col md="12">
-                      <FormGroup>
-                        <label>Address</label>
-                        <Input
-                          defaultValue="Melbourne, Australia"
-                          placeholder="Home Address"
-                          type="text"
-                        />
-                      </FormGroup>
-                    </Col>
-                  </Row>
-                  <Row>
-                    <Col className="pr-1" md="4">
-                      <FormGroup>
-                        <label>City</label>
-                        <Input
-                          defaultValue="Melbourne"
-                          placeholder="City"
-                          type="text"
-                        />
-                      </FormGroup>
-                    </Col>
-                    <Col className="px-1" md="4">
-                      <FormGroup>
-                        <label>Country</label>
-                        <Input
-                          defaultValue="Australia"
-                          placeholder="Country"
-                          type="text"
-                        />
-                      </FormGroup>
-                    </Col>
-                    <Col className="pl-1" md="4">
-                      <FormGroup>
-                        <label>Postal Code</label>
-                        <Input placeholder="ZIP Code" type="number" />
-                      </FormGroup>
-                    </Col>
-                  </Row>
-                  <Row>
-                    <Col md="12">
-                      <FormGroup>
-                        <label>About Me</label>
-                        <Input
-                          type="textarea"
-                          defaultValue="Oh so, your weak rhyme You doubt I'll bother, reading into it"
-                        />
-                      </FormGroup>
-                    </Col>
-                  </Row>
-                  <Row>
-                    <div className="update ml-auto mr-auto">
-                      <Button
-                        className="btn-round"
-                        color="primary"
-                        type="submit"
+                <Row>
+                  <Col md="6">
+                    <div style={{ marginBottom: 20 }}>
+                      <label style={{ fontWeight: 600 }}>Current AQI</label>
+                      <h2 style={{ marginBottom: 6 }}>{airPollutionIndex}</h2>
+                      <Badge
+                        color={
+                          airPollutionIndex <= 80
+                            ? "success"
+                            : airPollutionIndex <= 150
+                            ? "warning"
+                            : "danger"
+                        }
+                        pill
+                        style={{ padding: "8px 14px", fontSize: 14 }}
                       >
-                        Update Profile
-                      </Button>
+                        {aqiBand.label}
+                      </Badge>
                     </div>
-                  </Row>
-                </Form>
+                  </Col>
+                  <Col md="6">
+                    <div style={{ marginBottom: 20 }}>
+                      <label style={{ fontWeight: 600 }}>Reward Status</label>
+                      <h4 style={{ marginBottom: 6 }}>{reward.title}</h4>
+                      <p style={{ marginBottom: 0, color: "#7b809a" }}>{reward.message}</p>
+                    </div>
+                  </Col>
+                </Row>
+
+                <Row>
+                  {quickStats.map((stat) => (
+                    <Col md="6" key={stat.label}>
+                      <div
+                        style={{
+                          background: "#f8fafc",
+                          borderRadius: 16,
+                          padding: 18,
+                          marginBottom: 16,
+                          boxShadow: "0 12px 28px rgba(15, 23, 42, 0.06)",
+                        }}
+                      >
+                        <p style={{ marginBottom: 6, color: "#7b809a" }}>{stat.label}</p>
+                        <h4 style={{ marginBottom: 0 }}>{stat.value}</h4>
+                      </div>
+                    </Col>
+                  ))}
+                </Row>
+
+                <div
+                  style={{
+                    background: "#f8fafc",
+                    borderRadius: 18,
+                    padding: 20,
+                    boxShadow: "0 12px 28px rgba(15, 23, 42, 0.06)",
+                  }}
+                >
+                  <h5 style={{ marginBottom: 14 }}>Planning Recommendations</h5>
+                  {recommendations.map((item) => (
+                    <p key={item} style={{ marginBottom: 10 }}>
+                      {item}
+                    </p>
+                  ))}
+                  {loadError ? (
+                    <p style={{ marginBottom: 0, color: "#e74c3c", fontWeight: 600 }}>
+                      {loadError}
+                    </p>
+                  ) : null}
+                </div>
               </CardBody>
             </Card>
           </Col>

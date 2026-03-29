@@ -1,7 +1,6 @@
-
-import React from "react";
-
-// reactstrap components
+import React, { useEffect, useState } from "react";
+import { Bar } from "react-chartjs-2";
+import axios from "axios";
 import {
   Card,
   CardHeader,
@@ -11,42 +10,142 @@ import {
   Row,
   Col,
 } from "reactstrap";
-import { Line, Pie,Bar } from "react-chartjs-2";
 
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://127.0.0.1:5000";
+const REFRESH_INTERVAL_MS = 3000;
+const GRID_SIZE = 16;
+const TOTAL_GRID_CELLS = GRID_SIZE * GRID_SIZE;
 
+const BUILDING_LABELS = [
+  { key: "residential", label: "Houses", color: "rgba(255, 193, 7, 0.75)" },
+  { key: "commercial", label: "Commercial", color: "rgba(40, 167, 69, 0.75)" },
+  { key: "industrial", label: "Industries", color: "rgba(220, 53, 69, 0.75)" },
+  { key: "road", label: "Roads", color: "rgba(108, 117, 125, 0.8)" },
+  { key: "power-plant", label: "Power Stations", color: "rgba(0, 123, 255, 0.75)" },
+  { key: "base-station", label: "Base Stations", color: "rgba(111, 66, 193, 0.75)" },
+];
 
 function Statistics() {
+  const [buildings, setBuildings] = useState([]);
+  const [lastUpdated, setLastUpdated] = useState("");
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadBuildings = async () => {
+      try {
+        const response = await axios.get(`${API_BASE_URL}/arrq`);
+
+        if (isMounted && Array.isArray(response.data)) {
+          setBuildings(response.data);
+          setLastUpdated(new Date().toLocaleTimeString());
+        }
+      } catch (error) {
+        console.error("Failed to refresh statistics:", error);
+      }
+    };
+
+    loadBuildings();
+    const intervalId = window.setInterval(loadBuildings, REFRESH_INTERVAL_MS);
+
+    return () => {
+      isMounted = false;
+      window.clearInterval(intervalId);
+    };
+  }, []);
+
+  const buildingCounts = buildings.reduce(
+    (totals, building) => {
+      if (Object.prototype.hasOwnProperty.call(totals, building.buildingType)) {
+        totals[building.buildingType] += 1;
+      }
+
+      return totals;
+    },
+    {
+      residential: 0,
+      commercial: 0,
+      industrial: 0,
+      road: 0,
+      "power-plant": 0,
+      "base-station": 0,
+    }
+  );
+
+  const usedCells = Object.values(buildingCounts).reduce((sum, count) => sum + count, 0);
+  const greenery = Math.max(0, TOTAL_GRID_CELLS - usedCells);
+
+  const summaryRows = [
+    ...BUILDING_LABELS.map(({ key, label }) => ({
+      label,
+      count: buildingCounts[key],
+      share: ((buildingCounts[key] / TOTAL_GRID_CELLS) * 100).toFixed(1),
+    })),
+    {
+      label: "Greenery",
+      count: greenery,
+      share: ((greenery / TOTAL_GRID_CELLS) * 100).toFixed(1),
+    },
+  ];
 
   const barChartData = {
-    labels:["Houses", "Commercial", "Industries","Roads", "Power Stations", "Base Stations",  "Greenary"],
+    labels: [...BUILDING_LABELS.map(({ label }) => label), "Greenery"],
     datasets: [
       {
-        label: "Data",
-        backgroundColor: "rgba(75,192,192,0.2)",
-        borderColor: "rgba(75,192,192,1)",
+        label: "Grid Items",
+        backgroundColor: [
+          ...BUILDING_LABELS.map(({ color }) => color),
+          "rgba(25, 135, 84, 0.8)",
+        ],
+        borderColor: [
+          "rgba(255, 193, 7, 1)",
+          "rgba(40, 167, 69, 1)",
+          "rgba(220, 53, 69, 1)",
+          "rgba(108, 117, 125, 1)",
+          "rgba(0, 123, 255, 1)",
+          "rgba(111, 66, 193, 1)",
+          "rgba(25, 135, 84, 1)",
+        ],
         borderWidth: 1,
-        hoverBackgroundColor: "rgba(75,192,192,0.4)",
-        hoverBorderColor: "rgba(75,192,192,1)",
-        data: [65, 59, 80, 81, 56, 55, 40], // Example data for 7 columns
+        borderRadius: 8,
+        data: [...BUILDING_LABELS.map(({ key }) => buildingCounts[key]), greenery],
       },
     ],
   };
 
   const barChartOptions = {
-    scales: {
-      yAxes: [{
-        ticks: {
-          beginAtZero: true,
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        display: false,
+      },
+      tooltip: {
+        callbacks: {
+          label: (context) => `${context.label}: ${context.raw}`,
         },
-      }],
+      },
     },
-    barThickness: 20, // Decrease bar width
-    responsive: true, // Enable responsiveness
-    maintainAspectRatio: false, // Disable maintaining aspect ratio
-    legend: {
-      display: false, // Hide legend for a cleaner look
+    scales: {
+      y: {
+        beginAtZero: true,
+        ticks: {
+          precision: 0,
+        },
+        title: {
+          display: true,
+          text: "Count",
+        },
+      },
+      x: {
+        ticks: {
+          maxRotation: 0,
+          minRotation: 0,
+        },
+      },
     },
   };
+
   return (
     <>
       <div className="content">
@@ -54,61 +153,29 @@ function Statistics() {
           <Col md="12">
             <Card>
               <CardHeader>
-                <CardTitle tag="h4">Simple Table</CardTitle>
+                <CardTitle tag="h4">Grid Statistics</CardTitle>
+                <p className="card-category">
+                  Live counts from the planner grid
+                  {lastUpdated ? ` • refreshed at ${lastUpdated}` : ""}
+                </p>
               </CardHeader>
               <CardBody>
                 <Table responsive>
                   <thead className="text-primary">
                     <tr>
-                      <th>Name</th>
-                      <th>Country</th>
-                      <th>City</th>
-                      <th className="text-right">Salary</th>
+                      <th>Grid Item</th>
+                      <th>Count</th>
+                      <th>Share of 16x16 Grid</th>
                     </tr>
                   </thead>
                   <tbody>
-                    <tr>
-                      <td>Dakota Rice</td>
-                      <td>Niger</td>
-                      <td>Oud-Turnhout</td>
-                      <td className="text-right">$36,738</td>
-                    </tr>
-                    <tr>
-                      <td>Minerva Hooper</td>
-                      <td>Curaçao</td>
-                      <td>Sinaai-Waas</td>
-                      <td className="text-right">$23,789</td>
-                    </tr>
-                    <tr>
-                      <td>Sage Rodriguez</td>
-                      <td>Netherlands</td>
-                      <td>Baileux</td>
-                      <td className="text-right">$56,142</td>
-                    </tr>
-                    <tr>
-                      <td>Philip Chaney</td>
-                      <td>Korea, South</td>
-                      <td>Overland Park</td>
-                      <td className="text-right">$38,735</td>
-                    </tr>
-                    <tr>
-                      <td>Doris Greene</td>
-                      <td>Malawi</td>
-                      <td>Feldkirchen in Kärnten</td>
-                      <td className="text-right">$63,542</td>
-                    </tr>
-                    <tr>
-                      <td>Mason Porter</td>
-                      <td>Chile</td>
-                      <td>Gloucester</td>
-                      <td className="text-right">$78,615</td>
-                    </tr>
-                    <tr>
-                      <td>Jon Porter</td>
-                      <td>Portugal</td>
-                      <td>Gloucester</td>
-                      <td className="text-right">$98,615</td>
-                    </tr>
+                    {summaryRows.map((row) => (
+                      <tr key={row.label}>
+                        <td>{row.label}</td>
+                        <td>{row.count}</td>
+                        <td>{row.share}%</td>
+                      </tr>
+                    ))}
                   </tbody>
                 </Table>
               </CardBody>
@@ -119,18 +186,14 @@ function Statistics() {
           <Col md="12">
             <Card className="hover-effect">
               <CardHeader>
-                <CardTitle tag="h5">Bar Graph Example</CardTitle>
-                <p className="card-category">Seven Columns</p>
+                <CardTitle tag="h5">Dynamic Bar Graph</CardTitle>
+                <p className="card-category">
+                  This chart stays in sync with the current grid items
+                </p>
               </CardHeader>
-              <CardBody>
-                <Bar
-                  data={barChartData}
-                  options={barChartOptions}
-                  width={600}
-                  height={300}
-                />
+              <CardBody style={{ height: "360px" }}>
+                <Bar data={barChartData} options={barChartOptions} />
               </CardBody>
-              
             </Card>
           </Col>
         </Row>

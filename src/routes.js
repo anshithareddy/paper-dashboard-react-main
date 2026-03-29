@@ -72,7 +72,7 @@ var routes = [
 
   {
     path: "/typography",
-    name: "Score",
+    name: "Grid Advisor",
     icon: "fas fa-star text",
     component: <Typography />,
     layout: "/admin",
